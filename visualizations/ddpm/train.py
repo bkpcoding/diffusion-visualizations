@@ -38,6 +38,18 @@ def load_datasaurus(num=5000):
 
     return datasaurus_data
 
+def modes_data(num_samples):
+    # Generate data with three modes in the action space
+    modes = [(0.25, 0.25), (0.1, 0.8), (0.75, 0.75)]
+    # obs = np.random.choice(modes, size=(num_samples, 1))
+    actions = np.zeros((num_samples, 1, 2), dtype=np.float32)
+    for i in range(num_samples):
+        mode = modes[i % 3]
+        actions[i] = np.random.normal(loc=mode, scale=0.05, size=(1, 2))
+    actions = np.clip(actions, 0, 1)
+    return actions.squeeze(1)
+
+
 class SinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, embedding_dim=10, max_length=1000):
         super(SinusoidalPositionalEmbedding, self).__init__()
@@ -258,9 +270,10 @@ if __name__ == "__main__":
     # Make the diffusion model
     model = DiffusionModel()
     # Load the spiral dataset (just a torch tensor of dimension (N, 2))
-    # data = make_spiral_data(num_examples=1000, noise=0.0)
-    data = load_datasaurus()
+    data = make_spiral_data(num_examples=1000, noise=0.0)
+    # data = load_datasaurus()
+    data = modes_data(1000)
     # Run the training loop
     train(model, data, num_iterations=700000, batch_size=200, learning_rate=1e-4, device='cpu')
     # Save the state dict
-    torch.save(model.state_dict(), 'models/dino_model.pth')
+    torch.save(model.state_dict(), 'models/modes_model.pth')

@@ -9,6 +9,44 @@ from matplotlib.animation import FuncAnimation
 plt.style.use('dark_background')
 torch.autograd.set_detect_anomaly(True)
 
+def brrr_pdf(z):
+    """
+    This is the log probability density function for the "Brrr" distribution.
+    """
+    # Helper function to create a Gaussian distribution centered at (cx, cy) with standard deviation (sx, sy)
+    def gaussian(cx, cy, sx, sy):
+        return MultivariateNormal(torch.tensor([cx, cy]), torch.diag(torch.tensor([sx, sy])**2))
+    
+    # Define the centers and scales of the Gaussians for each part of the letters "Brrr"
+    centers_and_scales = [
+        # Letter B
+        (-6, 1, 0.5, 1), (-6, -1, 0.5, 1), (-5, 0, 0.5, 2),
+        (-6, 0.5, 0.5, 0.5), (-6, -0.5, 0.5, 0.5),
+        (-5, 1, 1., 0.5), (-5, -1, 1., 0.5),
+        (-5.5, 1.0, 0.75, 0.5), (-5.5, -1, 0.75, 0.5),
+        # First r
+        (-3.5, 0, 0.25, 1), (-3.5, -0, 1, 0.25),
+        (-3, -0.5, 0.25, 0.5), (-2.5, -0, 0.5, 0.25),
+        # Second r
+        # (-2, 0, 0.25, 1), (-2, -0, 1, 0.25),
+        # (-1.5, -0.5, 0.25, 0.5), (-1, -0, 0.5, 0.25),
+        # Third r
+        (-0.5, 0, 0.25, 1), (-0.5, -0, 1, 0.25),
+        (0, -0.5, 0.25, 0.5), (0.5, -0, 0.5, 0.25),
+        # Fourth r
+        (2.5, 0, 0.25, 1), (2.5, -0, 1, 0.25),
+        (3, -0.5, 0.25, 0.5), (3.5, -0, 0.5, 0.25),
+    ]
+    
+    # Compute the log probability for each Gaussian
+    log_probs = torch.zeros(z.shape[0])
+    for cx, cy, sx, sy in centers_and_scales:
+        gaussian_dist = gaussian(cx, cy, sx, sy)
+        log_probs += torch.exp(gaussian_dist.log_prob(z))
+    
+    return log_probs
+
+
 def generate_star_samples(num_samples=5000):
     """
         This is used to generate samples from the star distribution
@@ -114,7 +152,7 @@ def generate_langevin_samples(step_size=0.1, num_samples=5000, burn_in=2000):
     for i in tqdm(range(burn_in + num_samples)):
         x_current.requires_grad = True
         # Compute the gradient of the log pdf
-        u = torch.log(smiley_face_pdf(x_current.unsqueeze(0)))
+        u = torch.log(brrr_pdf(x_current.unsqueeze(0)))
         grad = torch.autograd.grad(u, x_current)[0]
         # Do Langevin Dynamics update
         x_current = x_current + step_size * grad + np.sqrt(2 * step_size) * torch.randn(2)
@@ -140,7 +178,7 @@ def make_animation():
     q0 = smiley_face_pdf(z)
     axs[0].pcolormesh(x, y, q0.reshape(x.shape), cmap='viridis')
     # Generate samples using langevin dynamics and animate the path on the left plot and show the final samples on the right.
-    num_samples = 5000
+    num_samples = 100
     # Generate the samples using langevin dynamics
     samples = generate_langevin_samples(num_samples=num_samples)
     # axs[1].hist2d(samples[:, 0], samples[:, 1], bins=100, cmap='viridis', density=True)
@@ -185,7 +223,18 @@ def make_animation():
     # Make the animation
     anim = FuncAnimation(fig, animate, frames=num_samples, interval=60)
     # Save as a video
-    anim.save('langevin_dynamics.mp4', writer='ffmpeg', fps=30)
+    anim.save('brr.mp4', writer='ffmpeg', fps=30)
 
 if __name__ == "__main__":
     make_animation()
+    # Generate some sample points to visualize the distribution
+    # num_samples = 10000
+    # samples = torch.randn(num_samples, 2) * 5
+    # pdf_values = brrr_pdf(samples)
+
+    # # Plot the distribution
+    # plt.figure(figsize=(8, 8))
+    # plt.scatter(samples[:, 0], samples[:, 1], c=pdf_values, cmap='viridis', s=1)
+    # plt.colorbar()
+    # plt.title("Brrr Distribution")
+    # plt.savefig('brr_distribution.png')
