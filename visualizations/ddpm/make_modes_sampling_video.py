@@ -1,4 +1,4 @@
-from train import make_spiral_data, DiffusionModel
+from train import modes_data_with_obs, DiffusionModel
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,51 +6,69 @@ import torch
 import seaborn as sns
 import pandas as pd
 
+plot_once = False
 if __name__ == "__main__":
+    print("Generating mode sampling animation...")
     # Load the diffusion model
-    diffusion_model = DiffusionModel()
-    diffusion_model.load_state_dict(torch.load('models/make_modes.pth'))
-    # Load the data
-    # spiral_data = make_spiral_data(num_examples=500, noise=0.5)
-    modes_data = modes_data(1000)
-    # Show generation of samples from it using the trained diffusion model
-    # Black background figure
-    plt.figure(figsize=(5, 5))
-    plt.ylim(-4, 4)
-    plt.xlim(-4, 4.5)
-    # Plot the spiral data
-    # spiral_data = spiral_data.detach().numpy()
-    modes_data = modes_data.detach().numpy()
-    # Show the plot
-    plt.legend()
-    # Show the path of each of the samples moving over time
-    # Generate N samples from the model, and save the intermediate paths
-    num_samples = 100
-    num_inference_steps = 1000
-    plot_every_n_steps = 20
-    samples, intermediate_values = diffusion_model.sample(num_samples=num_samples, num_timesteps=num_inference_steps)
-    # Intermediate values has shape (num_samples, num_inference_steps, 2)
-    # Pull out only every 50 samples
-    intermediate_values = intermediate_values[:, ::plot_every_n_steps, :]
-    # Now plot the intermediate values
+    total_timesteps = 10
+    diffusion_model = DiffusionModel(total_timesteps=total_timesteps)
+    diffusion_model.load_state_dict(torch.load('models/make_modes_conditioned_10.pth'))
+
+    # Define modes and number of samples
+    # modes = [0, 1, 2]
+    mode = 0
+    num_samples = 3
+    num_inference_steps = total_timesteps
+    plot_every_n_steps = 1
+    data, obs = modes_data_with_obs(num_samples)
+
+    # Create figure
+    # fig, axes = plt.subplots(1, len(modes), figsize=(10 * len(modes), 5))
+    fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+
+    # Generate samples and intermediate values for each mode
+    change_mode_timestep = 0.5
+    mode_samples = {}
+    mode_intermediate_values = {}
+    mode_changed_to = {}
+    # for mode in modes:
+    obs_tensor = torch.tensor([mode] * num_samples, dtype=torch.float32).unsqueeze(-1)
+    samples, intermediate_values, new_obs = diffusion_model.sample(obs_tensor,
+                    num_samples=num_samples, num_timesteps=num_inference_steps, change_mode_timestep=change_mode_timestep)
+    mode_samples[mode] = samples
+    mode_intermediate_values[mode] = intermediate_values[:, ::plot_every_n_steps, :]
+    mode_changed_to[mode] = new_obs
+
+    # Function to animate the plot
     def animate(i):
+        global plot_once
+        # Clear the axes
+        # for ax in axes:
+        ax.clear()
+        ax.set_xlim(-1, 1)
+        ax.set_ylim(-1, 1)
+        ax.axis('off')
+        
+        # for mode, ax in zip(modes, axes):
+        samples = mode_samples[mode]
+        intermediate_values = mode_intermediate_values[mode]
         sample_index = i // (num_inference_steps // plot_every_n_steps)
-        print(sample_index)
         intermediate_index = i % (num_inference_steps // plot_every_n_steps)
-        # Plot a line graph of the samples from sample_start_index to interemdiate_index
-        plt.clf()
-        plt.ylim(-4, 4)
-        plt.xlim(-4, 4.5)
-        plt.axis('off')
-        plt.scatter(modes_data[:, 0], modes_data[:, 1], alpha=0.4, color="#67a9cf", label="Ground Truth Data")
-        plt.plot(
+        # Plot the ground truth data
+        # if plot_once == False:
+        ax.scatter(data[:, 0], data[:, 1], alpha=0.4, color="#67a9cf", label="Ground Truth Data")
+        # write on the top of the datapoint which mode it belongs to
+        for i in range(len(data)):
+            ax.text(data[i][0], data[i][1] + 0.05, f"Mode: {obs[i].item()}", fontsize=8)
+        # Plot the intermediate values
+        ax.plot(
             intermediate_values[sample_index][:intermediate_index, 0], 
             intermediate_values[sample_index][:intermediate_index, 1], 
             color='#ef8a62', 
             linewidth=2
         )
-        # Do a scatter plot of the emperical samples up until the current sample index
-        plt.scatter(
+        # Plot the generated samples
+        ax.scatter(
             samples[:sample_index, 0],
             samples[:sample_index, 1],
             color='#ef8a62', 
@@ -59,7 +77,7 @@ if __name__ == "__main__":
         )
         # Plot a quiver for the last sample
         if intermediate_index > 0:
-            plt.quiver(
+            ax.quiver(
                 intermediate_values[sample_index][intermediate_index - 1, 0],
                 intermediate_values[sample_index][intermediate_index - 1, 1],
                 intermediate_values[sample_index][intermediate_index, 0] - intermediate_values[sample_index][intermediate_index - 1, 0],
@@ -67,9 +85,17 @@ if __name__ == "__main__":
                 color='#ef8a62',
                 linewidth=2
             )
-        plt.legend(loc='bottom', bbox_to_anchor=(1, 1), ncol=2)
+        # right the timestep on the bottom
+        ax.text(0, -0.9, f"Timestep: {intermediate_index}", fontsize=10)
+        # write on the bottom what the mode changed to
+        ax.text(-0.9, -0.9, f"Mode changed to: {mode_changed_to[mode][sample_index].item()} at timestep {change_mode_timestep * total_timesteps}", fontsize=7)
+        ax.legend(loc='upper left', fontsize='small')
+        ax.set_title(f'Initial Mode: {mode}')
+        plot_once = True
 
-    # Make the animation
-    anim = FuncAnimation(plt.gcf(), animate, frames=num_samples * num_inference_steps // plot_every_n_steps, interval=20)
+    # Create the animation
+    print("Creating animation...")
+    print("Number of frames:", num_samples * num_inference_steps // plot_every_n_steps)
+    anim = FuncAnimation(fig, animate, frames=num_samples * num_inference_steps // plot_every_n_steps, interval=1)
     # Save the animation
-    anim.save('plots/sample_animation.mp4', writer='ffmpeg', fps=30, dpi=500)
+    anim.save(f'plots/mode_sampling_animation_{total_timesteps}_{change_mode_timestep}.gif', writer='ffmpeg', fps=1, dpi=300)

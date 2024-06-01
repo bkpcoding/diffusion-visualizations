@@ -1,1 +1,3 @@
 *.aep
+visualizations/ddpm/models
+visualizations/ddpm/plots
